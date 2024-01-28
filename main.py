@@ -15,6 +15,7 @@ def __run__():
     LONG = getenv("LONG")
     DAYS = getenv("DAYS", 30)
     HOST = getenv("HOST", "https://api.niwa.co.nz/tides/data")
+    TIMEZONE = getenv("TIMEZONE", None)
 
     cal = Calendar()
     cal.add('prodid', '-//Maliloes//Tidal//')
@@ -22,7 +23,7 @@ def __run__():
 
     response = fetch_data(API_KEY, HOST, LAT, LONG, DAYS)
 
-    update_calendar(cal, response.json())
+    update_calendar(cal, response.json(), TIMEZONE)
 
     with open('tidal.ics', 'w', encoding="utf-8") as f:
         f.write(display(cal))

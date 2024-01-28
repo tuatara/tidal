@@ -11,16 +11,17 @@ How
 ---
 
 1. [Get yourself an API token](https://developer.niwa.co.nz) from NIWA.
-1. Create an `.env` file with values for `API_KEY`, `LAT` and `LONG`. You may also choose to set your own values for `DAYS` (defaulting to 30) or, if you want, `HOST`, although this seems very NIWA-specific and probably not useful elsewhere.
-1. Get your virtual environment in place: `python3 -m venv .venv --upgrade-deps`
+1. Get your virtual environment in place: `python3 -m venv .venv --upgrade-deps`.
 1. And activate it: `. .venv/bin/activate`.
+1. Create an `.env` file with values for `API_KEY`, `LAT` and `LONG`. You may also choose to set your own values for `DAYS` (defaulting to 30) or, if you want, `HOST`, although this seems very NIWA-specific and probably not useful elsewhere.
+1. If you’d like a localised time included in the event description, then add a `TIMEZONE` value in your `.env` file, e.g. "Pacific/Auckland".
 
 Generate a calendar locally
 ---------------------------
 
 1. Install the dependencies (`pip install -r requirements-base.txt` etc).
 1. Run `python3 main.py`.
-1. The calendar will be saved to the directory as `tidal.ical`.
+1. The calendar will be saved to the directory as `tidal.ics`.
 
 Deploy as a lambda function
 ---------------------------
