@@ -1,0 +1,72 @@
+name: AWS Multi-Account Deployment
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/actions-hack
+
+# Add environment at workflow level
+env:
+  ENVIRONMENT_NAME: dev
+
+jobs:
+  prepare-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    # Specify environment for this job
+    environment: ${{ env.ENVIRONMENT_NAME }}
+
+    steps:
+      # Debug step to verify environment access
+      - name: Debug Environment Access
+        run: |
+          echo "Environment name: ${{ env.ENVIRONMENT_NAME }}"
+          echo "All environment variables:"
+          env | grep -v -i key | grep -v -i token | grep -v -i secret | sort
+
+      - name: Set deployment matrix
+        id: set-matrix
+        run: |
+          # Debug the specific variable we need
+          echo "Checking AWS_DEPLOYMENT_TARGETS value..."
+          echo "Value present: $([[ ! -z "$AWS_DEPLOYMENT_TARGETS" ]] && echo "Yes" || echo "No")"
+
+          # Exit if variable is not set
+          if [ -z "$AWS_DEPLOYMENT_TARGETS" ]; then
+              echo "Error: AWS_DEPLOYMENT_TARGETS is not set"
+              exit 1
+          fi
+
+          # Transform JSON into matrix format
+          MATRIX_JSON=$(echo "$AWS_DEPLOYMENT_TARGETS" | jq -c '{include: [.[] | {account: .account_id, region: .region, environment: .environment}]}')
+          echo "matrix=$MATRIX_JSON" >> "$GITHUB_OUTPUT"
+
+          echo "Generated matrix:"
+          echo "$MATRIX_JSON"
+        env:
+          AWS_DEPLOYMENT_TARGETS: ${{ env.AWS_DEPLOYMENT_TARGETS }}
+
+  deploy:
+    needs: prepare-matrix
+    runs-on: ubuntu-latest
+    # Specify environment for this job too
+    environment: ${{ env.ENVIRONMENT_NAME }}
+    strategy:
+      matrix: ${{fromJSON(needs.prepare-matrix.outputs.matrix)}}
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # - name: Configure AWS Credentials
+      #   uses: aws-actions/configure-aws-credentials@v4
+      #   with:
+      #     role-to-assume: arn:aws:iam::${{ matrix.account }}:role/GithubActionsRole
+      #     aws-region: ${{ matrix.region }}
+
+      - name: Deploy to AWS
+        run: |
+          echo "Deploying to account ${{ matrix.account }} in region ${{ matrix.region }} for environment ${{ matrix.environment }}"
+          # Add your deployment commands here
