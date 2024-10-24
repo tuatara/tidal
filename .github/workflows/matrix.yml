@@ -53,7 +53,8 @@ jobs:
     needs: prepare-matrix
     runs-on: ubuntu-latest
     # Specify environment for this job too
-    environment: ${{ env.ENVIRONMENT_NAME }}
+    # environment: ${{ env.ENVIRONMENT_NAME }}
+    environment: dev
     strategy:
       matrix: ${{fromJSON(needs.prepare-matrix.outputs.matrix)}}
       fail-fast: false
