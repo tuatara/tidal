@@ -66,8 +66,8 @@ jobs:
 
       - name: Deploy to AWS
         run: |
-          echo "Deploying ${{ matrix.environments.web }} to account ${{ matrix.name }} in region ${{ matrix.region }} in bucket ${{ matrix.bucket }}"
-          echo "Deploying ${{ matrix.environments.worker }} to account ${{ matrix.name }} in region ${{ matrix.region }} in bucket ${{ matrix.bucket }}"
-          echo "Deploying ${{ matrix.environments.lp }} to account ${{ matrix.name }} in region ${{ matrix.region }} in bucket ${{ matrix.bucket }}"
+          echo "Deploying ${{ matrix.web }} to account ${{ matrix.name }} in region ${{ matrix.region }} in bucket ${{ matrix.bucket }}"
+          echo "Deploying ${{ matrix.worker }} to account ${{ matrix.name }} in region ${{ matrix.region }} in bucket ${{ matrix.bucket }}"
+          echo "Deploying ${{ matrix.lp }} to account ${{ matrix.name }} in region ${{ matrix.region }} in bucket ${{ matrix.bucket }}"
 
           # Add your deployment commands here
