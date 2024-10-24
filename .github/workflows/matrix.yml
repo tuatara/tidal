@@ -39,7 +39,7 @@ jobs:
           fi
 
           # Transform JSON into matrix format
-          MATRIX_JSON=$(echo "$AWS_DEPLOYMENT_TARGETS" | jq -c '{include: [.]}]}')
+          MATRIX_JSON=$(echo "$AWS_DEPLOYMENT_TARGETS" | jq -c '{include: [.]}')
           echo "matrix=$MATRIX_JSON" >> "$GITHUB_OUTPUT"
 
           echo "Generated matrix:"
