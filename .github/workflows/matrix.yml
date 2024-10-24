@@ -16,7 +16,8 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     # Specify environment for this job
-    environment: ${{ env.ENVIRONMENT_NAME }}
+    # environment: ${{ env.ENVIRONMENT_NAME }}
+    environment: dev
 
     steps:
       # Debug step to verify environment access
