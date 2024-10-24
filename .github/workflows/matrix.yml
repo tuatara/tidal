@@ -15,8 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
-    # Specify environment for this job
-    # environment: ${{ vars.ENVIRONMENT_NAME }}
     environment: dev
 
     steps:
@@ -41,7 +39,7 @@ jobs:
           fi
 
           # Transform JSON into matrix format
-          MATRIX_JSON=$(echo "$AWS_DEPLOYMENT_TARGETS" | jq -c '{include: [.[] | {account: .account_id, region: .region, environment: .environment}]}')
+          MATRIX_JSON=$(echo "$AWS_DEPLOYMENT_TARGETS" | jq -c '{include: [.]}]}')
           echo "matrix=$MATRIX_JSON" >> "$GITHUB_OUTPUT"
 
           echo "Generated matrix:"
@@ -52,8 +50,6 @@ jobs:
   deploy:
     needs: prepare-matrix
     runs-on: ubuntu-latest
-    # Specify environment for this job too
-    # environment: ${{ vars.ENVIRONMENT_NAME }}
     environment: dev
     strategy:
       matrix: ${{fromJSON(needs.prepare-matrix.outputs.matrix)}}
@@ -70,5 +66,8 @@ jobs:
 
       - name: Deploy to AWS
         run: |
-          echo "Deploying to account ${{ matrix.account }} in region ${{ matrix.region }} for environment ${{ matrix.environment }}"
+          echo "Deploying ${{ matrix.environments.web }} to account ${{ matrix.name }} in region ${{ matrix.region }} in bucket ${{ matrix.bucket }}"
+          echo "Deploying ${{ matrix.environments.worker }} to account ${{ matrix.name }} in region ${{ matrix.region }} in bucket ${{ matrix.bucket }}"
+          echo "Deploying ${{ matrix.environments.lp }} to account ${{ matrix.name }} in region ${{ matrix.region }} in bucket ${{ matrix.bucket }}"
+
           # Add your deployment commands here
