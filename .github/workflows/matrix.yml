@@ -16,14 +16,14 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     # Specify environment for this job
-    # environment: ${{ env.ENVIRONMENT_NAME }}
+    # environment: ${{ vars.ENVIRONMENT_NAME }}
     environment: dev
 
     steps:
       # Debug step to verify environment access
       - name: Debug Environment Access
         run: |
-          echo "Environment name: ${{ env.ENVIRONMENT_NAME }}"
+          echo "Environment name: ${{ vars.ENVIRONMENT_NAME }}"
           echo "All environment variables:"
           env | grep -v -i key | grep -v -i token | grep -v -i secret | sort
 
@@ -47,13 +47,13 @@ jobs:
           echo "Generated matrix:"
           echo "$MATRIX_JSON"
         env:
-          AWS_DEPLOYMENT_TARGETS: ${{ env.AWS_DEPLOYMENT_TARGETS }}
+          AWS_DEPLOYMENT_TARGETS: ${{ vars.AWS_DEPLOYMENT_TARGETS }}
 
   deploy:
     needs: prepare-matrix
     runs-on: ubuntu-latest
     # Specify environment for this job too
-    # environment: ${{ env.ENVIRONMENT_NAME }}
+    # environment: ${{ vars.ENVIRONMENT_NAME }}
     environment: dev
     strategy:
       matrix: ${{fromJSON(needs.prepare-matrix.outputs.matrix)}}
