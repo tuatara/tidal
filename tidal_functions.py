@@ -1,11 +1,11 @@
 from datetime import datetime
-import pytz
+from zoneinfo import ZoneInfo
 
 from icalendar import Event, vDatetime
 import requests
 
 
-def moon_phase(grade):
+def moon_phase(grade: int):
     if grade == 0:
         return "New moon"
     if grade < 0.25:
@@ -25,7 +25,7 @@ def moon_phase(grade):
     return "Moon is likely destroyed"
 
 
-def fetch_astro_data(api_key, lat, long, days=30):
+def fetch_astro_data(api_key: str, lat: float, long: float, days: int = 30):
     HEADERS = {}
     QUERY = {
         "key": api_key,
@@ -33,7 +33,9 @@ def fetch_astro_data(api_key, lat, long, days=30):
         "elements": "datetime,moonphase,moonrise",
         "timezone": "UTC",
     }
-    ENDPOINT = "https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/{},{}/next{}days".format(lat, long, days)
+    ENDPOINT = "https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/{},{}/next{}days".format(
+        lat, long, days
+    )
 
     return requests.get(ENDPOINT, headers=HEADERS, params=QUERY)
 
@@ -53,16 +55,18 @@ def fetch_tidal_data(api_key, lat, long, days=30):
 
 
 def update_astro_calendar(cal, payload):
-    for day in payload['days']:
-        if not day.get('moonrise', False):
+    for day in payload["days"]:
+        if not day.get("moonrise", False):
             continue
         event = Event()
 
-        dtstart = datetime.strptime("{} {}".format(day['datetime'], day['moonrise']), "%Y-%m-%d %H:%M:%S").astimezone(pytz.timezone(payload['timezone']))
-        event['uid'] = int(dtstart.timestamp())
-        event['dtstamp'] = vDatetime(dtstart).to_ical()
-        event['dtstart'] = vDatetime(dtstart).to_ical()
-        event['summary'] = moon_phase(day.get('moonphase'))
+        dtstart = datetime.strptime(
+            "{} {}".format(day["datetime"], day["moonrise"]), "%Y-%m-%d %H:%M:%S"
+        ).astimezone(ZoneInfo(payload["timezone"]))
+        event["uid"] = int(dtstart.timestamp())
+        event["dtstamp"] = vDatetime(dtstart).to_ical()
+        event["dtstart"] = vDatetime(dtstart).to_ical()
+        event["summary"] = moon_phase(day.get("moonphase"))
 
         cal.add_component(event)
 
@@ -70,21 +74,21 @@ def update_astro_calendar(cal, payload):
 
 
 def update_tidal_calendar(cal, payload, timezone=None):
-    for tide_turn in payload['values']:
+    for tide_turn in payload["values"]:
         event = Event()
-        dtstart = datetime.fromisoformat(tide_turn['time'])
-        event['uid'] = int(dtstart.timestamp())
-        event['dtstamp'] = vDatetime(dtstart).to_ical()
-        event['dtstart'] = vDatetime(dtstart).to_ical()
+        dtstart = datetime.fromisoformat(tide_turn["time"])
+        event["uid"] = int(dtstart.timestamp())
+        event["dtstamp"] = vDatetime(dtstart).to_ical()
+        event["dtstart"] = vDatetime(dtstart).to_ical()
 
-        if tide_turn['value'] < 1:
-            event['summary'] = "Low tide {} metres".format(tide_turn['value'])
+        if tide_turn["value"] < 1:
+            event["summary"] = "Low tide {} metres".format(tide_turn["value"])
         else:
-            event['summary'] = "High tide {} metres".format(tide_turn['value'])
+            event["summary"] = "High tide {} metres".format(tide_turn["value"])
 
         if timezone:
-            local_datetime = dtstart.astimezone(pytz.timezone(timezone))
-            event['summary'] += local_datetime.strftime(' @ %-I:%M%p').lower()
+            local_datetime = dtstart.astimezone(ZoneInfo(timezone))
+            event["summary"] += local_datetime.strftime(" @ %-I:%M%p").lower()
 
         cal.add_component(event)
 
@@ -92,4 +96,4 @@ def update_tidal_calendar(cal, payload, timezone=None):
 
 
 def display(cal):
-    return cal.to_ical().decode("utf-8").replace('\r\n', '\n')
+    return cal.to_ical().decode("utf-8").replace("\r\n", "\n")

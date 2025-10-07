@@ -3,7 +3,13 @@ from os import getenv
 from dotenv import load_dotenv
 from icalendar import Calendar
 
-from tidal_functions import fetch_astro_data, fetch_tidal_data, update_astro_calendar, update_tidal_calendar, display
+from tidal_functions import (
+    fetch_astro_data,
+    fetch_tidal_data,
+    update_astro_calendar,
+    update_tidal_calendar,
+    display,
+)
 
 
 load_dotenv()
@@ -18,8 +24,8 @@ def __run__():
     TIMEZONE = getenv("TIMEZONE", None)
 
     cal = Calendar()
-    cal.add('prodid', '-//Maliloes//Tidal//')
-    cal.add('version', '2.0')
+    cal.add("prodid", "-//Maliloes//Tidal//")
+    cal.add("version", "2.0")
 
     if VISUAL_CROSSING_API_KEY:
         astro_response = fetch_astro_data(VISUAL_CROSSING_API_KEY, LAT, LONG, DAYS)
@@ -29,10 +35,10 @@ def __run__():
         tidal_response = fetch_tidal_data(NIWA_API_KEY, LAT, LONG, DAYS)
         update_tidal_calendar(cal, tidal_response.json(), TIMEZONE)
 
-    with open('tidal.ics', 'w', encoding="utf-8") as f:
+    with open("tidal.ics", "w", encoding="utf-8") as f:
         f.write(display(cal))
 
-    print('OK')
+    print("OK")
 
 
 __run__()
