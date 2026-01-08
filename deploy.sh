@@ -9,7 +9,7 @@ echo Building dependencies…
 
 rm -rf deploy/* lambda-bundle.zip
 mkdir -p deploy
-pip3 install -r requirements.txt --require-virtualenv --upgrade --target deploy
+uv export --no-dev --no-hashes | uv pip install -r - --target deploy
 
 cd deploy
 zip -r ../lambda-bundle.zip .

@@ -1,6 +1,0 @@
-icalendar
-ipython
-python-dotenv
-requests
-
-flake8
