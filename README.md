@@ -9,24 +9,24 @@ Fetches NIWA tide data and saves to ical format.
 
 And for a bonus, also fetches astronomical data from Visual Crossing.
 
-Requires at least Python 3.10.
+Requires at least python 3.10, and uv.
 
 How
 ---
 
-1. Get yourself [an API token](https://developer.niwa.co.nz) from NIWA.
-1. Get yourself [another API token](https://www.visualcrossing.com/account) from Visual Crossing.
-1. Get your virtual environment in place: `python3 -m venv .venv --upgrade-deps`.
-1. And activate it: `. .venv/bin/activate`.
+1. Get yourself [an API token](https://developer.niwa.co.nz) from NIWA
+1. Get yourself [another API token](https://www.visualcrossing.com/account) from Visual Crossing
 1. Create an `.env` file with values for `NIWA_API_KEY`, `VISUAL_CROSSING_API_KEY`, `LAT` and `LONG`. You may also choose to set your own value for `DAYS` (defaulting to 30).
+1. Get your virtual environment in place: `uv venv`
+1. And activate it: `. .venv/bin/activate`.
 1. If you’d like a localised time included in the tides event description, then add a `TIMEZONE` value in your `.env` file, e.g. "Pacific/Auckland".
 
 Generate a calendar locally
 ---------------------------
 
-1. Install the dependencies (`pip install -r requirements-base.txt` etc).
-1. Run `python3 main.py`.
-1. The calendar will be saved to the directory as `tidal.ics`.
+1. Install the dependencies (`uv sync`)
+1. `uv run main.py`.
+1. The calendar will be saved to the directory as `tidal.ics`
 
 Deploy as a lambda function
 ---------------------------
