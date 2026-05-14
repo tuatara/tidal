@@ -5,3 +5,4 @@ __pycache__/
 deploy/
 lambda-bundle.zip
 tidal.ics
+.cache/
