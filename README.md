@@ -38,6 +38,6 @@ Deploy as a lambda function
 1. Run `./deploy.sh`, which will create `lambda-bundle.zip`.
 1. [Deploy it](https://docs.aws.amazon.com/lambda/latest/dg/python-package.html#python-package-create-update).
 1. Create an S3 bucket for the cache and add a `CACHE_BUCKET` environment variable to the Lambda with the bucket name.
-1. Ensure the Lambda execution role has `s3:GetObject` and `s3:PutObject` on that bucket.
+1. Ensure the Lambda execution role has `s3:GetObject` and `s3:PutObject` on `arn:aws:s3:::your-bucket/*` and `s3:ListBucket` on `arn:aws:s3:::your-bucket`. All three are required — without `s3:ListBucket`, S3 returns `403 AccessDenied` instead of `404` for cache misses.
 
 Note that you can override environment variables when you call the function by providing `lat`, `long` or `days` query string parameters.
