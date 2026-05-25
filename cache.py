@@ -32,7 +32,7 @@ def get(source: str, lat, lon, dt: date) -> dict | None:
             raise
     path = _LOCAL_DIR / _key(source, lat, lon, dt)
     if path.exists():
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
     return None
 
 
@@ -47,4 +47,4 @@ def put(source: str, lat, lon, dt: date, data: dict):
         return
     path = _LOCAL_DIR / _key(source, lat, lon, dt)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data))
+    path.write_text(json.dumps(data), encoding="utf-8")

@@ -6,3 +6,5 @@ deploy/
 lambda-bundle.zip
 tidal.ics
 .cache/
+.claude/settings.local.json
+

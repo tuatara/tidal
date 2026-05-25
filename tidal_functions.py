@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import cache
@@ -50,7 +50,7 @@ def _fetch_tidal_api(api_key: str, lat, lon, days: int = 30):
 
 
 def fetch_astro_data(api_key: str, lat, lon, days: int = 30) -> dict:
-    today = date.today()
+    today = datetime.now(timezone.utc).date()
     requested = _date_range(today, int(days))
 
     all_days: dict[date, dict] = {}
@@ -73,7 +73,7 @@ def fetch_astro_data(api_key: str, lat, lon, days: int = 30) -> dict:
 
 
 def fetch_tidal_data(api_key: str, lat, lon, days: int = 30) -> dict:
-    today = date.today()
+    today = datetime.now(timezone.utc).date()
     requested = _date_range(today, int(days))
 
     all_days: dict[date, dict] = {}
