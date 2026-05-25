@@ -28,12 +28,10 @@ def __run__():
     cal.add("version", "2.0")
 
     if VISUAL_CROSSING_API_KEY:
-        astro_response = fetch_astro_data(VISUAL_CROSSING_API_KEY, LAT, LONG, DAYS)
-        update_astro_calendar(cal, astro_response.json())
+        update_astro_calendar(cal, fetch_astro_data(VISUAL_CROSSING_API_KEY, LAT, LONG, DAYS))
 
     if NIWA_API_KEY:
-        tidal_response = fetch_tidal_data(NIWA_API_KEY, LAT, LONG, DAYS)
-        update_tidal_calendar(cal, tidal_response.json(), TIMEZONE)
+        update_tidal_calendar(cal, fetch_tidal_data(NIWA_API_KEY, LAT, LONG, DAYS), TIMEZONE)
 
     with open("tidal.ics", "w", encoding="utf-8") as f:
         f.write(display(cal))

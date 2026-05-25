@@ -1,8 +1,13 @@
-from datetime import datetime
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+import cache
 from icalendar import Event, vDatetime
 import requests
+
+
+def _date_range(start: date, days: int) -> list[date]:
+    return [start + timedelta(days=i) for i in range(days)]
 
 
 def moon_phase(grade: int):
@@ -25,33 +30,73 @@ def moon_phase(grade: int):
     return "Moon is likely destroyed"
 
 
-def fetch_astro_data(api_key: str, lat: float, long: float, days: int = 30):
-    HEADERS = {}
-    QUERY = {
-        "key": api_key,
-        "include": "days",
-        "elements": "datetime,moonphase,moonrise",
-        "timezone": "UTC",
-    }
-    ENDPOINT = "https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/{},{}/next{}days".format(
-        lat, long, days
+def _fetch_astro_api(api_key: str, lat, lon, days: int = 30):
+    response = requests.get(
+        f"https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/{lat},{lon}/next{days}days",
+        params={"key": api_key, "include": "days", "elements": "datetime,moonphase,moonrise", "timezone": "UTC"},
     )
+    response.raise_for_status()
+    return response
 
-    return requests.get(ENDPOINT, headers=HEADERS, params=QUERY)
+
+def _fetch_tidal_api(api_key: str, lat, lon, days: int = 30):
+    response = requests.get(
+        "https://api.niwa.co.nz/tides/data",
+        headers={"x-apikey": api_key},
+        params={"lat": lat, "long": lon, "numberOfDays": days},
+    )
+    response.raise_for_status()
+    return response
 
 
-def fetch_tidal_data(api_key, lat, long, days=30):
-    HEADERS = {
-        "x-apikey": api_key,
-    }
-    QUERY = {
-        "lat": lat,
-        "long": long,
-        "numberOfDays": days,
-    }
-    ENDPOINT = "https://api.niwa.co.nz/tides/data"
+def fetch_astro_data(api_key: str, lat, lon, days: int = 30) -> dict:
+    today = datetime.now(timezone.utc).date()
+    requested = _date_range(today, int(days))
 
-    return requests.get(ENDPOINT, headers=HEADERS, params=QUERY)
+    all_days: dict[date, dict] = {}
+    missing = []
+
+    for dt in requested:
+        hit = cache.get("astro", lat, lon, dt)
+        if hit is not None:
+            all_days[dt] = hit
+        else:
+            missing.append(dt)
+
+    if missing:
+        for day in _fetch_astro_api(api_key, lat, lon, days).json()["days"]:
+            dt = date.fromisoformat(day["datetime"])
+            cache.put("astro", lat, lon, dt, day)
+            all_days[dt] = day
+
+    return {"timezone": "UTC", "days": [all_days[dt] for dt in requested if dt in all_days]}
+
+
+def fetch_tidal_data(api_key: str, lat, lon, days: int = 30) -> dict:
+    today = datetime.now(timezone.utc).date()
+    requested = _date_range(today, int(days))
+
+    all_days: dict[date, dict] = {}
+    missing = []
+
+    for dt in requested:
+        hit = cache.get("tides", lat, lon, dt)
+        if hit is not None:
+            all_days[dt] = hit
+        else:
+            missing.append(dt)
+
+    if missing:
+        fresh: dict[date, list] = {}
+        for value in _fetch_tidal_api(api_key, lat, lon, days).json()["values"]:
+            dt = datetime.fromisoformat(value["time"]).date()
+            fresh.setdefault(dt, []).append(value)
+        for dt, values in fresh.items():
+            day_data = {"values": values}
+            cache.put("tides", lat, lon, dt, day_data)
+            all_days[dt] = day_data
+
+    return {"values": [v for dt in requested for v in all_days.get(dt, {}).get("values", [])]}
 
 
 def update_astro_calendar(cal, payload):

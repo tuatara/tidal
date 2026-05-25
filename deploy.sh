@@ -14,6 +14,6 @@ uv export --no-dev --no-hashes | uv pip install -r - --target deploy
 cd deploy
 zip -r ../lambda-bundle.zip .
 cd -
-zip lambda-bundle.zip lambda_function.py tidal_functions.py .env
+zip lambda-bundle.zip lambda_function.py tidal_functions.py cache.py .env
 
 echo Prepared lambda-bundle.zip
