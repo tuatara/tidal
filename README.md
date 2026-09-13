@@ -11,7 +11,7 @@ And for a bonus, also fetches astronomical data from Visual Crossing.
 
 API responses are cached per-day so repeat runs avoid redundant API calls.
 
-Requires at least python 3.10, and uv.
+Requires at least python 3.14, and uv.
 
 How
 ---
@@ -35,8 +35,21 @@ Fetched data is cached to `.cache/` so subsequent runs only call the APIs for da
 Deploy as a lambda function
 ---------------------------
 
-1. Run `./deploy.sh`, which will create `lambda-bundle.zip`.
-1. [Deploy it](https://docs.aws.amazon.com/lambda/latest/dg/python-package.html#python-package-create-update).
+Deployment runs through GitHub Actions. A push to `main` triggers
+`.github/workflows/deploy.yml`, which builds the bundle on a Linux runner for the
+Lambda runtime, updates the function code, then smoke tests the function URL.
+Linting and dependency auditing run in `.github/workflows/ci.yml`. See
+`docs/ci-pipeline.md` for the one-time AWS setup.
+
+Deploying by hand
+-----------------
+
+1. Run `./deploy.sh`, which creates `lambda-bundle.zip` built for Linux x86_64 and Python 3.14.
+1. `aws lambda update-function-code --function-name Tidal --zip-file fileb://lambda-bundle.zip`
+
+One-time setup
+--------------
+
 1. Create an S3 bucket for the cache and add a `CACHE_BUCKET` environment variable to the Lambda with the bucket name.
 1. Ensure the Lambda execution role has `s3:GetObject` and `s3:PutObject` on `arn:aws:s3:::your-bucket/*` and `s3:ListBucket` on `arn:aws:s3:::your-bucket`. All three are required — without `s3:ListBucket`, S3 returns `403 AccessDenied` instead of `404` for cache misses.
 
