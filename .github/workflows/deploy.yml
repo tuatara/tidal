@@ -1,0 +1,58 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-southeast-2
+  FUNCTION_NAME: Tidal
+
+jobs:
+  deploy:
+    name: Deploy to Lambda
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v9
+        with:
+          version: "0.12.13"
+          enable-cache: true
+
+      - name: Audit dependencies
+        run: uv audit --no-dev
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::036700217332:role/tidal-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Build bundle
+        run: ./deploy.sh
+
+      - name: Update function code
+        run: |
+          aws lambda update-function-code \
+            --function-name "$FUNCTION_NAME" \
+            --zip-file fileb://lambda-bundle.zip \
+            --query '{State:State,CodeSize:CodeSize,LastModified:LastModified}'
+
+      - name: Smoke test
+        run: |
+          function_url=$(aws lambda get-function-url-config \
+            --function-name "$FUNCTION_NAME" \
+            --query FunctionUrl --output text)
+          curl -fsS --max-time 60 "$function_url" | grep -q "BEGIN:VCALENDAR"
+          echo "Function URL returned a valid calendar"

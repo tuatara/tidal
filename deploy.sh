@@ -1,19 +1,21 @@
-#!/bin/sh
+#!/usr/bin/env bash
+set -euo pipefail
 
-if [[ -z "$VIRTUAL_ENV" ]]; then
-  echo You are not in a virtual environment. Cancelling build.
-  exit 1
-fi
+python_version=3.14
+target_platform=x86_64-manylinux_2_28
 
-echo Building dependencies…
+echo Building dependencies...
 
 rm -rf deploy/* lambda-bundle.zip
 mkdir -p deploy
-uv export --no-dev --no-hashes | uv pip install -r - --target deploy
+uv export --no-dev --no-hashes | uv pip install -r - --target deploy \
+  --python-version "$python_version" \
+  --python-platform "$target_platform"
 
-cd deploy
-zip -r ../lambda-bundle.zip .
-cd -
-zip lambda-bundle.zip lambda_function.py tidal_functions.py cache.py .env
+(
+  cd deploy
+  zip -qr ../lambda-bundle.zip .
+)
+zip -q lambda-bundle.zip lambda_function.py tidal_functions.py cache.py
 
 echo Prepared lambda-bundle.zip

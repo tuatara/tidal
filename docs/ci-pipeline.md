@@ -1,22 +1,161 @@
 # CI/CD pipeline
 
-Deferred work. Recorded 2026-09-12, not yet implemented.
+## What is in place
 
----
+| File | Purpose |
+|---|---|
+| `.github/workflows/ci.yml` | On pull request and push to `main`: `uv sync --locked`, `uv run flake8`, `uv audit --no-dev`, then builds the bundle and asserts it is Linux-native and free of `.env`. |
+| `.github/workflows/deploy.yml` | On push to `main` and manual dispatch: audits, assumes the deploy role via OIDC, builds, runs `update-function-code`, then smoke tests the Function URL. |
+| `deploy.sh` | The single build path, used locally and by both workflows. |
 
-## Current state
+`deploy.sh` targets `x86_64-manylinux_2_28` for Python 3.14, excludes the dev
+dependency group, and no longer bundles `.env`. That fixes the original problem,
+where a bundle built on macOS shipped `charset_normalizer/*-darwin.so` into the
+Linux runtime.
 
-### Repo
+### Build command
 
-- `github.com/tuatara/tidal`, public, so Actions minutes are unmetered.
-- No `.github/` directory on `main`.
-- `deploy.sh` builds the bundle with `uv export --no-dev | uv pip install --target deploy`, then zips `lambda_function.py tidal_functions.py cache.py .env` on top.
-- A previous attempt lives only on `feature/actions-hack` (Oct 2024): `matrix.yml` and `simpler.yml`. Both were copied from a work project (multi-account matrix, `GithubActionsRole`, `web`/`worker`/`lp` environments) and are irrelevant here. The branch should be deleted rather than resurrected.
-- Dependabot is enabled through the repo UI with no committed config, so it targets the `pip` ecosystem and does not understand `uv.lock`. Four stale PRs remain from 2024: `#1` idna 3.4 to 3.7, `#2` requests 2.31.0 to 2.32.0, `#3` urllib3 2.1.0 to 2.2.2, `#4` certifi 2023.7.22 to 2024.7.4.
+`uv export` has no `--python-platform` flag, contrary to an earlier revision of
+this document. The flag belongs on the install step:
 
-### Deployed
+```
+uv export --no-dev --no-hashes \
+  | uv pip install -r - --target deploy \
+      --python-version 3.14 \
+      --python-platform x86_64-manylinux_2_28
+```
 
-Account `036700217332`, region `ap-southeast-2`.
+The platform must be set explicitly. A macOS build would otherwise resolve darwin
+wheels, and a build on `ubuntu-latest` could resolve wheels newer than the glibc
+that Amazon Linux 2023 provides.
+
+`uv audit` prints an experimental-command warning. That is expected. The preview
+flag that silences it is deliberately not used, to avoid coupling CI to a flag
+name that may change.
+
+## One-time AWS setup
+
+These steps need a profile with write access. The credentials used during this
+work were read-only and have since expired.
+
+### 1. OIDC identity provider
+
+Check first, then create only if absent:
+
+```
+aws iam list-open-id-connect-providers
+aws iam create-open-id-connect-provider \
+  --url https://token.actions.githubusercontent.com \
+  --client-id-list sts.amazonaws.com
+```
+
+### 2. Deploy role
+
+Create `tidal-github-deploy` with this trust policy. The `sub` condition is what
+stops a pull request, or any other branch, from assuming the role:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::036700217332:oidc-provider/token.actions.githubusercontent.com"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+          "token.actions.githubusercontent.com:sub": "repo:tuatara/tidal:ref:refs/heads/main"
+        }
+      }
+    }
+  ]
+}
+```
+
+Permission policy:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "lambda:UpdateFunctionCode",
+      "Resource": "arn:aws:lambda:ap-southeast-2:036700217332:function:Tidal"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "lambda:GetFunctionUrlConfig",
+      "Resource": "arn:aws:lambda:ap-southeast-2:036700217332:function:Tidal"
+    }
+  ]
+}
+```
+
+A possible third statement for `kms:Decrypt` is described below.
+
+### 3. Bump the runtime to Python 3.14
+
+```
+aws lambda update-function-configuration \
+  --function-name Tidal \
+  --region ap-southeast-2 \
+  --runtime python3.14
+```
+
+Omitting `--environment` leaves the existing variables untouched. Never pass a
+partial `--environment` to this call: the variables are encrypted with a
+customer-managed key and cannot be read back to recover them.
+
+Do this before the first pipeline deploy. The currently deployed bundle was built
+for 3.13, and its only compiled artifact is `charset_normalizer`, which falls back
+to a pure-Python implementation when the extension does not match, so there is no
+window where the function stops working.
+
+## The `kms:Decrypt` question
+
+The function's environment variables are encrypted with customer-managed KMS key
+`f691836b-0e93-4173-b7a5-0eff8e13b5ad`. Lambda requires `kms:Decrypt` for any
+caller reading that configuration: `get-function-configuration` fails without it,
+which was confirmed against the live function.
+
+It is not confirmed whether `update-function-code` needs it too, because the
+credentials available during this work expired before that could be tested. If the
+first deploy run fails with a KMS access-denied error, add:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": "kms:Decrypt",
+  "Resource": "arn:aws:kms:ap-southeast-2:036700217332:key/f691836b-0e93-4173-b7a5-0eff8e13b5ad"
+}
+```
+
+That also lets the workflow read the API keys back out through
+`get-function-configuration`. The OIDC subject condition bounds who can trigger
+that, but it is a real widening of the role.
+
+## Findings worth keeping in view
+
+1. **`cache.py` reads `CACHE_BUCKET` at import time, before `load_dotenv()` runs.** In `lambda_function.py` the order is `from tidal_functions import ...`, which imports `cache`, and only then `load_dotenv()`. It works today only because `CACHE_BUCKET` is a real Lambda environment variable. Anything set only in `.env` would be invisible to `cache.py`.
+2. **The Function URL is public and unauthenticated**, with `lat`, `long` and `days` overridable by query string, calling two metered APIs at 12 to 16 seconds per invocation.
+3. **`boto3` and `botocore` are provided by the Lambda runtime.** Bundling them accounts for most of the bundle's size.
+
+## Follow-ups, not done
+
+- **Move the API keys into Secrets Manager.** They are CMK-encrypted Lambda environment variables today, which works, but it forces the `kms:Decrypt` conversation above. Referencing them as `{{resolve:secretsmanager:...}}` and resolving with `asm-exec` would remove the keys from the function configuration entirely.
+- **Drop `boto3`/`botocore` from the bundle**, since the runtime provides them. Confirm the runtime version is acceptable first.
+- **Switch Dependabot to the `uv` ecosystem** with a committed `dependabot.yml`, and close PRs `#1` to `#4`, which `uv lock --upgrade` supersedes.
+- **Delete `feature/actions-hack`**, the abandoned October 2024 attempt copied from a work project (multi-account matrix, `GithubActionsRole`, `web`/`worker`/`lp` environments).
+- **Consider requiring CI before merge to `main`** through branch protection. The deploy workflow audits the lock before deploying, but a direct push to `main` still deploys.
+- **The SAM stack**, the deferred second step, remains undone. If it is picked up, recreate rather than import: the execution role sits at `/service-role/` and is not manageable as an ordinary CloudFormation resource, and the environment variables cannot be read back to populate a template.
+
+## Deployed state for reference
+
+Account `036700217332`, region `ap-southeast-2`, as at 2026-09-12.
 
 | Property | Value |
 |---|---|
@@ -34,86 +173,11 @@ Account `036700217332`, region `ap-southeast-2`.
 | Log group | `/aws/lambda/Tidal` |
 | Cache bucket | `tidal-cache-036700217332-ap-southeast-2-an`, no bucket policy |
 
-The S3 cache is live: 141 `astro/` and 141 `tides/` objects, written in bursts, with invocations landing in the same second as the writes.
+The S3 cache is live: 141 `astro/` and 141 `tides/` objects, written in bursts,
+with invocations landing in the same second as the writes.
 
-### Findings
-
-1. **The bundle ships macOS C extensions to Linux.** `deploy/` contains `charset_normalizer/md__mypyc.cpython-313-darwin.so` and `md.cpython-313-darwin.so`. `charset_normalizer` is a `requests` dependency, so it is on the hot path for every NIWA and Visual Crossing call. Building on a Linux runner removes this class of bug by construction.
-2. **The deployed artifact is stale.** The live zip hashes to `b00fd9dc80acde4f8427657d5dcf3eae8862aa704470153254ac9c0fd9840111`, byte-identical to the local `lambda-bundle.zip`, which is the May bundle containing `requests` 2.32.5. The urllib3 2.6.3 advisories are live in production.
-3. **Secrets are in the deployment artifact.** `deploy.sh` zips `.env`, which holds `NIWA_API_KEY` and `VISUAL_CROSSING_API_KEY`, alongside the code. The function also has CMK-encrypted env vars, and `load_dotenv()` does not override existing variables, so the bundled `.env` is redundant. Anyone with `lambda:GetFunction` can download the code and read the keys in plaintext.
-4. **`cache.py` reads `CACHE_BUCKET` at import time, before `load_dotenv()` runs.** In `lambda_function.py` the order is `from tidal_functions import ...`, which imports `cache`, and only then `load_dotenv()`. It works today only because `CACHE_BUCKET` is a real Lambda env var. Anything set only in `.env` would be invisible to `cache.py`.
-5. **The Function URL is public and unauthenticated**, with `lat`, `long` and `days` overridable by query string, calling two metered APIs at 12 to 16 seconds per invocation, many times an hour.
-
----
-
-## Step 1: pipeline that only builds and updates code
-
-No endpoint change, no role migration, no KMS re-plumbing. This captures most of the value: a correct Linux build and a dependency audit gate.
-
-### Files to add
-
-- `.github/workflows/ci.yml`, on `pull_request` and push to `main`:
-  - `uv sync --locked`
-  - `uv run flake8`
-  - `uv audit --no-dev` (experimental, prints a warning unless passed `--preview-features audit-command`)
-- `.github/workflows/deploy.yml`, on push to `main` and `workflow_dispatch`:
-  - build the bundle on `ubuntu-latest`
-  - `aws lambda update-function-code --function-name Tidal --region ap-southeast-2 --zip-file fileb://lambda-bundle.zip`
-
-### Build command
-
-Prefer `sam build` once Step 2 lands. Until then, resolve for the target platform explicitly so the build is correct regardless of the runner:
-
-```
-uv export --no-dev --no-hashes --python-platform x86_64-manylinux_2_28
-```
-
-### Auth
-
-Use GitHub OIDC into a dedicated IAM role, with a trust policy for `token.actions.githubusercontent.com` scoped to `repo:tuatara/tidal:ref:refs/heads/main` and a condition on the audience. Grant only `lambda:UpdateFunctionCode` on the one function ARN, plus `lambda:GetFunction` if needed. No long-lived access keys in repo secrets.
-
-### Constraints
-
-- Never call `update-function-configuration` from the pipeline. A partial payload will clobber the CMK-encrypted environment variables, and they cannot be read back to recover them.
-- Remove `.env` from the zip in whatever build script remains, per finding 3.
-
----
-
-## Step 2: adopt into a SAM stack (optional)
-
-CloudFormation has no adopt-by-name behaviour. Declaring `AWS::Lambda::Function` with `FunctionName: Tidal` makes the deploy attempt a create and fail, so it is import or recreate.
-
-Recreate rather than import, because:
-
-- The role is at `/service-role/` and was console-generated, so it is not manageable as an ordinary CloudFormation resource. The template needs a new role regardless.
-- The environment variables are CMK-encrypted and cannot be read back through the API, so they must be re-entered. The template needs `KmsKeyId` on `Environment` or it will silently deploy plaintext variables.
-- The function's only irreplaceable asset is its Function URL, and repointing it is a one-time manual re-subscribe on each device.
-
-The template should create the function, a fresh execution role, its own Function URL, and the cache bucket, or reference the existing bucket by parameter. The cache is disposable, so a new bucket costs only a re-fetch.
-
----
-
-## Step 3: Dependabot
-
-- Add a committed `dependabot.yml` targeting the `uv` ecosystem so it understands `uv.lock`.
-- Close PRs `#1` to `#4`; `uv lock --upgrade` supersedes all four.
-
----
-
-## Open decisions
-
-1. **Runtime: stay on `python3.13` or move to `3.14`?** This blocks Step 1. `pyproject.toml` declares `requires-python = ">=3.14"` and `.python-version` is `3.14`, but the deployed function is `python3.13`. Resolving dependencies for 3.14 and uploading to a 3.13 runtime will produce a confusing failure. Either build against the deployed runtime, or move the function to 3.14 first.
-2. **Keep `deploy.sh` or delete it?** If the pipeline owns the build, a second, subtly different local build path invites drift.
-3. **Is Step 2 needed at all?** If the goal is only a correct build plus an audit gate, Step 1 is sufficient and the infrastructure can stay undescribed.
-
----
-
-## Verification
-
-For Step 1, when it is picked up:
-
-- Workflow dry run on a PR: `uv sync --locked`, `flake8` and `uv audit` all run, and the audit gate fails on a deliberately known-bad lock.
-- Inspect the built bundle for platform tags. `unzip -l lambda-bundle.zip | grep -E "darwin|manylinux"` must show `manylinux` and never `darwin`.
-- Confirm `.env` is absent from the bundle.
-- After deploy, confirm the Function URL still serves a valid `.ics` and that env vars remain encrypted.
-- Confirm the cache bucket continues receiving writes during an invocation.
+The deployed artifact hashes to
+`b00fd9dc80acde4f8427657d5dcf3eae8862aa704470153254ac9c0fd9840111`, byte-identical
+to the local `lambda-bundle.zip` as it stood before this work: the May bundle
+containing `requests` 2.32.5, which is why the urllib3 2.6.3 advisories and the
+darwin extension were both live in production.
