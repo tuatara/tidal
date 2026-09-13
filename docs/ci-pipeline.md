@@ -13,6 +13,17 @@ dependency group, and no longer bundles `.env`. That fixes the original problem,
 where a bundle built on macOS shipped `charset_normalizer/*-darwin.so` into the
 Linux runtime.
 
+### Action pinning
+
+Action refs are pinned to a full commit SHA, with the human-readable version in a
+trailing comment. A version tag can be repointed, and `astral-sh/setup-uv`
+publishes no moving major tags at all, so an `@v9` style ref does not resolve.
+Bump these deliberately, resolving the SHA with:
+
+```
+git ls-remote --tags https://github.com/<owner>/<repo> refs/tags/<tag> refs/tags/<tag>^{}
+```
+
 ### Build command
 
 `uv export` has no `--python-platform` flag, contrary to an earlier revision of
