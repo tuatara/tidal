@@ -106,7 +106,7 @@ Permission policy:
 }
 ```
 
-A possible third statement for `kms:Decrypt` is described below.
+No `kms:Decrypt` statement is needed. The reasoning is below.
 
 ### 3. Bump the runtime to Python 3.14
 
@@ -126,16 +126,22 @@ for 3.13, and its only compiled artifact is `charset_normalizer`, which falls ba
 to a pure-Python implementation when the extension does not match, so there is no
 window where the function stops working.
 
-## The `kms:Decrypt` question
+## KMS and the deploy role
 
 The function's environment variables are encrypted with customer-managed KMS key
-`f691836b-0e93-4173-b7a5-0eff8e13b5ad`. Lambda requires `kms:Decrypt` for any
-caller reading that configuration: `get-function-configuration` fails without it,
-which was confirmed against the live function.
+`f691836b-0e93-4173-b7a5-0eff8e13b5ad`. The deploy role does not need access to it.
 
-It is not confirmed whether `update-function-code` needs it too, because the
-credentials available during this work expired before that could be tested. If the
-first deploy run fails with a KMS access-denied error, add:
+The Lambda documentation states that `kms:Decrypt` is required "to view and manage
+environment variables that are encrypted with a customer managed key", and that
+users without it "can still manage functions, but they can't view environment
+variables or manage them in the Lambda console". Updating function code is a manage
+operation, not a view one, so the two `lambda:` statements above are sufficient.
+
+The distinction is observable: `get-function-configuration` does fail without
+`kms:Decrypt`, which was confirmed against the live function. That is the view path.
+`update-function-code` does not go through it.
+
+If a deploy ever does fail with a KMS access-denied error, add this as a fallback:
 
 ```json
 {
@@ -145,9 +151,11 @@ first deploy run fails with a KMS access-denied error, add:
 }
 ```
 
-That also lets the workflow read the API keys back out through
+Be aware that it also lets the workflow read the API keys back out through
 `get-function-configuration`. The OIDC subject condition bounds who can trigger
-that, but it is a real widening of the role.
+that, but it is a real widening of the role, so it should not be a default.
+
+Source: <https://docs.aws.amazon.com/lambda/latest/dg/configuration-envvars-encryption.html>
 
 ## Findings worth keeping in view
 
